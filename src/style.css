@@ -278,6 +278,8 @@ body {
 .replay-slot {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .replay-slot:empty {
@@ -588,7 +590,8 @@ body {
 
 /* ===== Replay button ===== */
 
-.replay-btn {
+.replay-btn,
+.share-btn {
   margin-top: 8px;
   padding: 14px 36px;
   background: transparent;
@@ -603,9 +606,11 @@ body {
   animation: replay-fade 0.4s 0.1s ease-out both;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  text-decoration: none;
 }
 
-.replay-btn:active {
+.replay-btn:active,
+.share-btn:active {
   background: rgba(var(--player-color-rgb), 0.12);
 }
 

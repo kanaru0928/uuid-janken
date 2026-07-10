@@ -1,13 +1,14 @@
 import "./style.css";
-import { createIcons, Swords, RefreshCcw, ChevronsDownUp } from "lucide";
+import { createIcons, Swords, RefreshCcw, ChevronsDownUp, Share2 } from "lucide";
 import {
   getRevealDelay,
   getRevealFrequency,
   getRevealShakeDistance,
   REVEAL_CHARACTER_COUNT,
 } from "./reveal";
+import { createWinnerShareUrl } from "./share";
 
-const ICONS = { Swords, RefreshCcw, ChevronsDownUp };
+const ICONS = { Swords, RefreshCcw, ChevronsDownUp, Share2 };
 
 type Phase = "idle" | "countdown" | "reveal" | "result";
 
@@ -324,8 +325,20 @@ function showResult() {
       btn.addEventListener("click", resetGame);
       target.appendChild(btn);
     };
+    const makeShareBtn = (target: HTMLElement, player: 0 | 1) => {
+      const shareLink = document.createElement("a");
+      shareLink.className = "share-btn";
+      shareLink.href = createWinnerShareUrl(player === 0 ? 1 : 2, uuids[player]);
+      shareLink.target = "_blank";
+      shareLink.rel = "noopener noreferrer";
+      shareLink.innerHTML = `<i data-lucide="share-2" class="btn-icon"></i>結果をシェア`;
+      target.appendChild(shareLink);
+    };
     makeBtn(replaySlots[0]);
     makeBtn(replaySlots[1]);
+    if (winner !== "draw" && winner !== null) {
+      makeShareBtn(replaySlots[winner], winner);
+    }
     createIcons({ icons: ICONS });
   }, 1800);
 }
