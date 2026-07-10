@@ -8,7 +8,9 @@ import {
   getRevealShakeDistance,
   REVEAL_CHARACTER_COUNT,
 } from "./reveal";
+import winGong from "./assets/win-gong.mp3";
 import { createWinnerShareUrl } from "./share";
+import { playWinSound } from "./win-sound";
 
 const ICONS = { Swords, RefreshCcw, ChevronsDownUp };
 const TWITTER_ICON = icon(faTwitter).html.join("");
@@ -38,6 +40,8 @@ let rafId = 0;
 let revealTimer = 0;
 let audioContext: AudioContext | null = null;
 let revealShake: Animation | null = null;
+let winSoundPlayed = false;
+let winSound: HTMLAudioElement;
 // "最初は / 4〜 / じゃんけん...." — UUID v4 battle cry
 const CALL_SEQUENCE: { text: string; cls: string; duration: number }[] = [
   { text: "最初は", cls: "call-saisho", duration: 750 },
@@ -313,6 +317,7 @@ function showResult() {
     setTimeout(() => app.classList.remove("shaking"), 500);
     setStatus(winner, "WIN！");
     setStatus(loser, "LOSE...");
+    winSoundPlayed = playWinSound(winSound, winSoundPlayed);
     spawnParticles(winner);
   }
 
@@ -358,6 +363,7 @@ function resetGame() {
   uuids = ["", ""];
   revealCount = 0;
   winner = null;
+  winSoundPlayed = false;
 
   halfEls[0].className = "half bottom";
   halfEls[1].className = "half top";
@@ -378,6 +384,8 @@ function resizeCanvas() {
 
 function init() {
   const app = document.getElementById("app")!;
+  winSound = new Audio(winGong);
+  winSound.preload = "auto";
 
   // Both halves share the SAME DOM order (divider → outward). rotate(180deg)
   // on the top half makes that order read naturally for the facing player,
