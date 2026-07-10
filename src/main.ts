@@ -33,6 +33,7 @@ let particles: Particle[] = [];
 let rafId = 0;
 let revealTimer = 0;
 let audioContext: AudioContext | null = null;
+let revealShake: Animation | null = null;
 // "最初は / 4〜 / じゃんけん...." — UUID v4 battle cry
 const CALL_SEQUENCE: { text: string; cls: string; duration: number }[] = [
   { text: "最初は", cls: "call-saisho", duration: 750 },
@@ -118,6 +119,20 @@ function playRevealSound() {
   oscillator.stop(now + 0.05);
 }
 
+function playRevealShake(app: HTMLElement, shakeDistance: number) {
+  revealShake?.cancel();
+  if (shakeDistance === 0) return;
+
+  revealShake = app.animate(
+    [
+      { transform: `translateX(${shakeDistance}px)` },
+      { transform: `translateX(${-shakeDistance}px)` },
+      { transform: "translateX(0)" },
+    ],
+    { duration: Math.min(getRevealDelay(revealCount), 120), easing: "ease-out" },
+  );
+}
+
 function spawnRipple(half: HTMLElement, x: number, y: number) {
   const rect = half.getBoundingClientRect();
   const r = document.createElement("div");
@@ -184,17 +199,15 @@ function startReveal() {
   phase = "reveal";
   revealCount = 0;
   const app = document.getElementById("app")!;
-  app.classList.add("revealing");
   refreshUUIDs();
 
   const tick = () => {
     if (phase !== "reveal") return;
     revealCount++;
     const shakeDistance = getRevealShakeDistance(revealCount);
-    app.style.setProperty("--reveal-shake-distance", `${shakeDistance}px`);
-    app.style.setProperty("--reveal-shake-distance-negative", `${-shakeDistance}px`);
     refreshUUIDs();
     playRevealSound();
+    playRevealShake(app, shakeDistance);
     if (revealCount < REVEAL_CHARACTER_COUNT) {
       revealTimer = window.setTimeout(tick, getRevealDelay(revealCount));
     } else {
@@ -278,9 +291,7 @@ function spawnParticles(winnerIdx: 0 | 1) {
 function showResult() {
   phase = "result";
   const app = document.getElementById("app")!;
-  app.classList.remove("revealing");
-  app.style.removeProperty("--reveal-shake-distance");
-  app.style.removeProperty("--reveal-shake-distance-negative");
+  revealShake?.cancel();
 
   const cmp = compareUUIDs(uuids[0], uuids[1]);
   if (cmp === "draw") {
@@ -322,6 +333,7 @@ function showResult() {
 function resetGame() {
   clearTimeout(revealTimer);
   cancelAnimationFrame(rafId);
+  revealShake?.cancel();
   particles = [];
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 

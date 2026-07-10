@@ -13,7 +13,7 @@ export function getRevealDelay(revealedCount: number): number {
 }
 
 export function getRevealFrequency(revealedCount: number): number {
-  return LOWEST_REVEAL_FREQUENCY * 2 ** (revealedCount / REVEAL_CHARACTER_COUNT);
+  return LOWEST_REVEAL_FREQUENCY * 2 ** (revealedCount / (REVEAL_CHARACTER_COUNT / 2));
 }
 
 export function getRevealShakeDistance(revealedCount: number): number {
