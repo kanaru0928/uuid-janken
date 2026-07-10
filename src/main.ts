@@ -1,5 +1,6 @@
 import "./style.css";
 import { createIcons, Swords, RefreshCcw, ChevronsDownUp } from "lucide";
+import { getRevealDelay, getRevealFrequency, REVEAL_CHARACTER_COUNT } from "./reveal";
 
 const ICONS = { Swords, RefreshCcw, ChevronsDownUp };
 
@@ -26,8 +27,7 @@ let winner: 0 | 1 | "draw" | null = null;
 let particles: Particle[] = [];
 let rafId = 0;
 let revealTimer = 0;
-
-const REVEAL_MS = 75;
+let audioContext: AudioContext | null = null;
 // "最初は / 4〜 / じゃんけん...." — UUID v4 battle cry
 const CALL_SEQUENCE: { text: string; cls: string; duration: number }[] = [
   { text: "最初は", cls: "call-saisho", duration: 750 },
@@ -92,6 +92,27 @@ function setStatus(p: 0 | 1, html: string) {
   statusEls[p].innerHTML = html;
 }
 
+function prepareAudio() {
+  audioContext ??= new AudioContext();
+  void audioContext.resume();
+}
+
+function playRevealSound() {
+  if (!audioContext) return;
+
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const now = audioContext.currentTime;
+  oscillator.type = "square";
+  oscillator.frequency.value = getRevealFrequency(revealCount);
+  gain.gain.setValueAtTime(0.035, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.05);
+}
+
 function spawnRipple(half: HTMLElement, x: number, y: number) {
   const rect = half.getBoundingClientRect();
   const r = document.createElement("div");
@@ -103,6 +124,7 @@ function spawnRipple(half: HTMLElement, x: number, y: number) {
 }
 
 function onTap(player: 0 | 1, x: number, y: number) {
+  prepareAudio();
   if (phase !== "idle") return;
   if (ready[player]) return;
 
@@ -162,14 +184,15 @@ function startReveal() {
     if (phase !== "reveal") return;
     revealCount++;
     refreshUUIDs();
-    if (revealCount < 36) {
-      revealTimer = window.setTimeout(tick, REVEAL_MS);
+    playRevealSound();
+    if (revealCount < REVEAL_CHARACTER_COUNT) {
+      revealTimer = window.setTimeout(tick, getRevealDelay(revealCount));
     } else {
       revealTimer = window.setTimeout(showResult, 600);
     }
   };
 
-  revealTimer = window.setTimeout(tick, REVEAL_MS);
+  revealTimer = window.setTimeout(tick, getRevealDelay(revealCount));
 }
 
 function spawnParticles(winnerIdx: 0 | 1) {

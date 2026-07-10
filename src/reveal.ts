@@ -1,0 +1,16 @@
+export const REVEAL_CHARACTER_COUNT = 36;
+
+const MIN_REVEAL_DELAY_MS = 55;
+const MAX_REVEAL_DELAY_MS = 280;
+const LOWEST_REVEAL_FREQUENCY = 220;
+
+export function getRevealDelay(revealedCount: number): number {
+  const progress = revealedCount / (REVEAL_CHARACTER_COUNT - 1);
+  return Math.round(
+    MIN_REVEAL_DELAY_MS + (MAX_REVEAL_DELAY_MS - MIN_REVEAL_DELAY_MS) * progress ** 3,
+  );
+}
+
+export function getRevealFrequency(revealedCount: number): number {
+  return LOWEST_REVEAL_FREQUENCY * 2 ** (revealedCount / REVEAL_CHARACTER_COUNT);
+}
