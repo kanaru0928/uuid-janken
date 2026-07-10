@@ -7,6 +7,8 @@
     "dev": "vp dev",
     "build": "tsc && vp build",
     "preview": "vp preview",
+    "deploy": "vp build && wrangler deploy",
+    "deploy:dry": "wrangler deploy --dry-run",
     "prepare": "vp config"
   },
   "dependencies": {
@@ -15,7 +17,8 @@
   "devDependencies": {
     "typescript": "~6.0.2",
     "vite": "catalog:",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "wrangler": "^4.107.1"
   },
   "devEngines": {
     "packageManager": {

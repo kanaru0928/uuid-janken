@@ -31,13 +31,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm run build
-
-      # Run wrangler via npx (isolated from the Vite+ pnpm workspace) to avoid
-      # pnpm's build-script gate that breaks wrangler-action's auto-install.
-      - name: Deploy
-        run: npx --yes wrangler@4 deploy
+      # Runs "vp build && wrangler deploy" — same as `vp run deploy` locally.
+      - name: Build & Deploy
+        run: pnpm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
