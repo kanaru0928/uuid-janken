@@ -1,5 +1,7 @@
 import "./style.css";
-import { createIcons, Swords, RefreshCcw, ChevronsDownUp, Share2 } from "lucide";
+import { icon } from "@fortawesome/fontawesome-svg-core";
+import { faTwitter } from "@fortawesome/free-brands-svg-icons/faTwitter";
+import { createIcons, Swords, RefreshCcw, ChevronsDownUp } from "lucide";
 import {
   getRevealDelay,
   getRevealFrequency,
@@ -8,7 +10,8 @@ import {
 } from "./reveal";
 import { createWinnerShareUrl } from "./share";
 
-const ICONS = { Swords, RefreshCcw, ChevronsDownUp, Share2 };
+const ICONS = { Swords, RefreshCcw, ChevronsDownUp };
+const TWITTER_ICON = icon(faTwitter).html.join("");
 
 type Phase = "idle" | "countdown" | "reveal" | "result";
 
@@ -328,10 +331,15 @@ function showResult() {
     const makeShareBtn = (target: HTMLElement, player: 0 | 1) => {
       const shareLink = document.createElement("a");
       shareLink.className = "share-btn";
-      shareLink.href = createWinnerShareUrl(player === 0 ? 1 : 2, uuids[player]);
+      shareLink.href = createWinnerShareUrl(
+        player === 0 ? 1 : 2,
+        uuids[0],
+        uuids[1],
+        window.location.href,
+      );
       shareLink.target = "_blank";
       shareLink.rel = "noopener noreferrer";
-      shareLink.innerHTML = `<i data-lucide="share-2" class="btn-icon"></i>結果をシェア`;
+      shareLink.innerHTML = `${TWITTER_ICON}ツイートする`;
       target.appendChild(shareLink);
     };
     makeBtn(replaySlots[0]);
