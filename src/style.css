@@ -158,6 +158,31 @@ body {
   font-weight: 600;
 }
 
+/* ===== Sound notice ===== */
+
+.sound-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.5);
+  transition: opacity 0.25s;
+}
+
+.sound-note-icon,
+.sound-note svg {
+  width: 20px;
+  height: 20px;
+  stroke: rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+
+/* Fade the notice away once the player has tapped in. */
+.half.ready .sound-note {
+  opacity: 0;
+}
+
 /* ===== UUID Display ===== */
 
 .uuid-display {
@@ -187,7 +212,6 @@ body {
 
 .uuid-char.dash {
   color: rgba(255, 255, 255, 0.05);
-  width: 0.5ch;
 }
 
 .uuid-char.revealed {
