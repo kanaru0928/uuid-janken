@@ -13,6 +13,11 @@ export const RACE_SUPPORTED =
 const GO = 0;
 const COUNTER = 1;
 
+// Real rounds settle in a handful of milliseconds; this only guards against a
+// worker that never responds (blocked load, crash, etc.), so it can be short
+// without risking a false timeout on a healthy race.
+const ROUND_TIMEOUT_MS = 1000;
+
 let workerA: Worker | null = null;
 let workerB: Worker | null = null;
 let view: Int32Array | null = null;
@@ -28,7 +33,20 @@ function ensureWorkers(): void {
   workerB.postMessage({ type: "init", sab });
 }
 
-function runRound(): Promise<{ aWon: boolean }> {
+// Terminates and discards the current worker pair so ensureWorkers() spins up
+// a fresh pair next round, instead of retrying against workers that already
+// proved broken (crashed, blocked, or stuck mid-round).
+function discardWorkers(): void {
+  workerA?.terminate();
+  workerB?.terminate();
+  workerA = null;
+  workerB = null;
+  view = null;
+}
+
+// Resolves null (instead of throwing) on error or timeout, so callers can fall
+// back to a coin flip rather than hang forever.
+function runRound(): Promise<{ aWon: boolean } | null> {
   const a = workerA!;
   const b = workerB!;
   const v = view!;
@@ -40,8 +58,32 @@ function runRound(): Promise<{ aWon: boolean }> {
     let readyCount = 0;
     let seqA = -1;
     let doneCount = 0;
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      a.removeEventListener("message", handlerA);
+      b.removeEventListener("message", handlerB);
+      a.removeEventListener("error", onError);
+      b.removeEventListener("error", onError);
+    };
+
+    const onError = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(null);
+    };
+
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(null);
+    }, ROUND_TIMEOUT_MS);
 
     const onMessageFrom = (who: "a" | "b") => (e: MessageEvent) => {
+      if (settled) return;
       const msg = e.data;
       if (msg.type === "ready") {
         readyCount++;
@@ -50,8 +92,8 @@ function runRound(): Promise<{ aWon: boolean }> {
         if (who === "a") seqA = msg.seq;
         doneCount++;
         if (doneCount === 2) {
-          a.removeEventListener("message", handlerA);
-          b.removeEventListener("message", handlerB);
+          settled = true;
+          cleanup();
           resolve({ aWon: seqA === 0 });
         }
       }
@@ -60,24 +102,30 @@ function runRound(): Promise<{ aWon: boolean }> {
     const handlerB = onMessageFrom("b");
     a.addEventListener("message", handlerA);
     b.addEventListener("message", handlerB);
+    a.addEventListener("error", onError);
+    b.addEventListener("error", onError);
     a.postMessage({ type: "round" });
     b.postMessage({ type: "round" });
   });
 }
 
 // Returns whether "player 0" wins the race. Falls back to a fair coin flip
-// when SharedArrayBuffer/cross-origin isolation isn't available, so v7 play
-// still works on hosts without the COOP/COEP headers set.
+// when SharedArrayBuffer/cross-origin isolation isn't available, or when the
+// worker race itself fails to resolve, so v7 play never hangs.
 export async function racePlayer0Wins(): Promise<boolean> {
   if (!RACE_SUPPORTED) {
     return Math.random() < 0.5;
   }
 
   ensureWorkers();
-  const { aWon } = await runRound();
+  const result = await runRound();
+  if (!result) {
+    discardWorkers();
+    return Math.random() < 0.5;
+  }
   // Randomize which physical worker stands in for which player each round —
   // the prototype showed hardware scheduling bias can be consistent, so a
   // fixed worker-to-player mapping would let it consistently favor one seat.
   const aIsPlayer0 = Math.random() < 0.5;
-  return aIsPlayer0 ? aWon : !aWon;
+  return aIsPlayer0 ? result.aWon : !result.aWon;
 }
