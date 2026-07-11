@@ -801,6 +801,55 @@ body {
     );
   }
 
+  /* The mobile layout positions the toggles beside the divider icon
+     (top/left/right) for a horizontal divider; on the vertical desktop
+     divider that overlaps the icon and its `pointer-events: none` blocks
+     clicks. Stack them above/below the icon instead, centered on the
+     divider's vertical axis, and re-enable pointer events. Both players
+     face the same way on desktop, so the 180deg --toggle-rotate used to
+     make the left toggle readable upside-down (for the rotated .half.top)
+     no longer applies. */
+  .version-toggle {
+    top: auto;
+    left: 50%;
+    right: auto;
+    --toggle-rotate: 0deg;
+    transform: translateX(-50%);
+    pointer-events: auto;
+  }
+
+  .version-toggle-left {
+    top: 24px;
+  }
+
+  .version-toggle-right {
+    bottom: 24px;
+  }
+
+  .version-toggle.switching {
+    animation-name: version-toggle-pop-desktop;
+  }
+
+  @keyframes version-toggle-pop-desktop {
+    0% {
+      transform: translateX(-50%) scale(0.7);
+    }
+    40% {
+      transform: translateX(-50%) scale(1.35);
+      border-color: #ffdd00;
+      color: #ffdd00;
+      text-shadow:
+        0 0 16px rgba(255, 220, 0, 0.9),
+        0 0 32px rgba(255, 220, 0, 0.5);
+    }
+    70% {
+      transform: translateX(-50%) scale(0.95);
+    }
+    100% {
+      transform: translateX(-50%) scale(1);
+    }
+  }
+
   /* One centered countdown call is enough on desktop (no facing player). */
   .countdown-half.for-top {
     display: none;

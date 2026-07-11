@@ -8,8 +8,9 @@ import {
   getRevealShakeDistance,
   REVEAL_CHARACTER_COUNT,
 } from "./reveal";
+import { fallbackUuidV7Pair } from "./race";
 import { createDrawShareUrl, createWinnerShareUrl } from "./share";
-import { compareUuids, generateRaceUuids, type UuidVersion } from "./uuid";
+import { compareUuids, generateRaceUuids, generateUuidV4, type UuidVersion } from "./uuid";
 
 const ICONS = { Swords, RefreshCcw, ChevronsDownUp, Volume2 };
 const TWITTER_ICON = icon(faTwitter).html.join("");
@@ -301,11 +302,22 @@ function startCountdown() {
       countdownHalves[0].innerHTML = "";
       countdownHalves[1].innerHTML = "";
       countdownEl.classList.remove("active");
-      void uuidsPromise.then(([player0, player1]) => {
-        uuids[0] = player0;
-        uuids[1] = player1;
-        startReveal();
-      });
+      void uuidsPromise
+        .then(([player0, player1]) => {
+          uuids[0] = player0;
+          uuids[1] = player1;
+          startReveal();
+        })
+        // generateRaceUuids() shouldn't reject in practice (race.ts falls
+        // back internally on error/timeout), but guard against a stray
+        // rejection so the game can't get stuck on the countdown screen.
+        .catch(() => {
+          const [player0, player1] =
+            uuidVersion === "v4" ? [generateUuidV4(), generateUuidV4()] : fallbackUuidV7Pair();
+          uuids[0] = player0;
+          uuids[1] = player1;
+          startReveal();
+        });
       return;
     }
 

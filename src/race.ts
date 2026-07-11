@@ -29,15 +29,32 @@ let workerA: Worker | null = null;
 let workerB: Worker | null = null;
 let view: Int32Array | null = null;
 
+// Builds both workers in a local before touching the module variables.
+// `new Worker(...)` can throw synchronously (CSP blocking module workers,
+// unsupported environment, etc.); if workerA got created and assigned before
+// workerB's construction threw, workerA would leak past a caller-side
+// discardWorkers() that only runs on the *next* call. Terminating a locally
+// held first worker in the catch means a thrown error leaves the module
+// variables untouched and nothing outstanding, so callers only ever need to
+// discard a fully-formed pair.
 function ensureWorkers(): void {
   if (workerA && workerB && view) return;
 
   const sab = new SharedArrayBuffer(4);
+  const a = new Worker(new URL("./race-worker.ts", import.meta.url), { type: "module" });
+  let b: Worker;
+  try {
+    b = new Worker(new URL("./race-worker.ts", import.meta.url), { type: "module" });
+  } catch (err) {
+    a.terminate();
+    throw err;
+  }
+  a.postMessage({ type: "init", sab });
+  b.postMessage({ type: "init", sab });
+
   view = new Int32Array(sab);
-  workerA = new Worker(new URL("./race-worker.ts", import.meta.url), { type: "module" });
-  workerB = new Worker(new URL("./race-worker.ts", import.meta.url), { type: "module" });
-  workerA.postMessage({ type: "init", sab });
-  workerB.postMessage({ type: "init", sab });
+  workerA = a;
+  workerB = b;
 }
 
 // Terminates and discards the current worker pair so ensureWorkers() spins up
@@ -98,7 +115,13 @@ function runRound(): Promise<{ uuidA: string; uuidB: string } | null> {
       const msg = e.data;
       if (msg.type === "ready") {
         readyCount++;
-        if (readyCount === 2) Atomics.store(v, GO, 1);
+        if (readyCount === 2) {
+          Atomics.store(v, GO, 1);
+          // Wakes both workers (each blocked in Atomics.wait) at once, so
+          // they're released from the barrier as close to simultaneously as
+          // possible and the actual race is decided by thread scheduling.
+          Atomics.notify(v, GO);
+        }
       } else if (msg.type === "result") {
         if (who === "a") uuidA = uuidV7();
         else uuidB = uuidV7();
@@ -127,7 +150,7 @@ function runRound(): Promise<{ uuidA: string; uuidB: string } | null> {
 // package's internal monotonic state guarantees the second UUID always sorts
 // higher, and a coin flip decides which player gets it, so the fallback stays
 // as fair as the real race.
-function fallbackUuidV7Pair(): [string, string] {
+export function fallbackUuidV7Pair(): [string, string] {
   const lower = uuidV7();
   const higher = uuidV7();
   const player0Wins = Math.random() < 0.5;
@@ -136,15 +159,22 @@ function fallbackUuidV7Pair(): [string, string] {
 
 // Returns a pair of UUID v7 strings, one per player, decided by racing two
 // Worker threads. Falls back to a fair coin flip when SharedArrayBuffer/
-// cross-origin isolation isn't available, or when the worker race itself
-// fails to resolve, so v7 play never hangs.
+// cross-origin isolation isn't available, when the worker race itself fails
+// to resolve, or when starting/running the workers throws synchronously
+// (e.g. a CSP blocking module workers), so v7 play never hangs or throws.
 export async function raceUuidV7Pair(): Promise<[string, string]> {
   if (!RACE_SUPPORTED) {
     return fallbackUuidV7Pair();
   }
 
-  ensureWorkers();
-  const result = await runRound();
+  let result;
+  try {
+    ensureWorkers();
+    result = await runRound();
+  } catch {
+    discardWorkers();
+    return fallbackUuidV7Pair();
+  }
   if (!result) {
     discardWorkers();
     return fallbackUuidV7Pair();
