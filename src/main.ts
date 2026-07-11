@@ -9,6 +9,7 @@ import {
   REVEAL_CHARACTER_COUNT,
 } from "./reveal";
 import { createWinnerShareUrl } from "./share";
+import { compareUuids, generateRaceUuids, type UuidVersion } from "./uuid";
 
 const ICONS = { Swords, RefreshCcw, ChevronsDownUp };
 const TWITTER_ICON = icon(faTwitter).html.join("");
@@ -38,10 +39,11 @@ let rafId = 0;
 let revealTimer = 0;
 let audioContext: AudioContext | null = null;
 let revealShake: Animation | null = null;
-// "最初は / 4〜 / じゃんけん...." — UUID v4 battle cry
-const CALL_SEQUENCE: { text: string; cls: string; duration: number }[] = [
+let uuidVersion: UuidVersion = "v4";
+// "最初は / 4〜 / じゃんけん...." — battle cry, version digit matches uuidVersion
+const callSequence = (): { text: string; cls: string; duration: number }[] => [
   { text: "最初は", cls: "call-saisho", duration: 750 },
-  { text: "4", cls: "call-four", duration: 850 },
+  { text: uuidVersion === "v4" ? "4" : "7", cls: "call-four", duration: 850 },
   { text: "じゃんけん", cls: "call-janken", duration: 1050 },
 ];
 const PARTICLE_COLORS = ["#00ff88", "#ff5f35", "#ffffff", "#ffdd00", "#00cfff", "#ff66cc"];
@@ -52,21 +54,9 @@ let statusEls: [HTMLElement, HTMLElement];
 let replaySlots: [HTMLElement, HTMLElement];
 let countdownEl: HTMLElement;
 let countdownHalves: [HTMLElement, HTMLElement];
+let versionToggleEls: HTMLElement[];
 let canvas: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D;
-
-function buildUUID(): string {
-  return crypto.randomUUID();
-}
-
-function compareUUIDs(a: string, b: string): "a" | "b" | "draw" {
-  const n = (s: string) => s.replace(/-/g, "").toUpperCase();
-  const na = n(a),
-    nb = n(b);
-  if (na > nb) return "a";
-  if (na < nb) return "b";
-  return "draw";
-}
 
 function buildUUIDHtml(playerIdx: 0 | 1): string {
   const uuid = uuids[playerIdx];
@@ -100,6 +90,12 @@ function refreshUUIDs() {
 
 function setStatus(p: 0 | 1, html: string) {
   statusEls[p].innerHTML = html;
+}
+
+function setVersionTogglesVisible(visible: boolean) {
+  for (const el of versionToggleEls) {
+    el.style.display = visible ? "" : "none";
+  }
 }
 
 function prepareAudio() {
@@ -238,23 +234,30 @@ function onTap(player: 0 | 1, x: number, y: number) {
 
 function startCountdown() {
   phase = "countdown";
-  uuids[0] = buildUUID();
-  uuids[1] = buildUUID();
+  setVersionTogglesVisible(false);
   revealCount = 0;
+  // Kicked off now so it has the whole countdown (2.6s) to resolve — the
+  // race finishes in well under that, v4 resolves immediately.
+  const uuidsPromise = generateRaceUuids(uuidVersion);
 
   countdownEl.classList.add("active");
+  const sequence = callSequence();
   let step = 0;
 
   const tick = () => {
-    if (step >= CALL_SEQUENCE.length) {
+    if (step >= sequence.length) {
       countdownHalves[0].innerHTML = "";
       countdownHalves[1].innerHTML = "";
       countdownEl.classList.remove("active");
-      startReveal();
+      void uuidsPromise.then(([player0, player1]) => {
+        uuids[0] = player0;
+        uuids[1] = player1;
+        startReveal();
+      });
       return;
     }
 
-    const { text, cls, duration } = CALL_SEQUENCE[step];
+    const { text, cls, duration } = sequence[step];
     const makeEl = () => {
       const el = document.createElement("div");
       el.className = `countdown-number ${cls}`;
@@ -372,7 +375,7 @@ function showResult() {
   revealShake?.cancel();
   playFanfareSound();
 
-  const cmp = compareUUIDs(uuids[0], uuids[1]);
+  const cmp = compareUuids(uuids[0], uuids[1]);
   if (cmp === "draw") {
     winner = "draw";
     halfEls[0].classList.add("draw");
@@ -442,6 +445,7 @@ function resetGame() {
   replaySlots[1].innerHTML = "";
   setStatus(0, "タップして準備");
   setStatus(1, "タップして準備");
+  setVersionTogglesVisible(true);
 
   createIcons({ icons: ICONS });
 }
@@ -466,7 +470,11 @@ function init() {
 
   app.innerHTML = `
     <div class="half top" id="half-1">${halfInner(2)}</div>
-    <div class="divider"><i data-lucide="chevrons-down-up" class="divider-icon"></i></div>
+    <div class="divider">
+      <button type="button" class="version-toggle version-toggle-left">${uuidVersion}</button>
+      <i data-lucide="chevrons-down-up" class="divider-icon"></i>
+      <button type="button" class="version-toggle version-toggle-right">${uuidVersion}</button>
+    </div>
     <div class="half bottom" id="half-0">${halfInner(1)}</div>
     <div class="countdown-overlay" id="countdown">
       <div class="countdown-half for-top" id="countdown-top"></div>
@@ -496,6 +504,18 @@ function init() {
     document.getElementById("countdown-bottom") as HTMLElement,
     document.getElementById("countdown-top") as HTMLElement,
   ];
+  versionToggleEls = Array.from(document.querySelectorAll<HTMLElement>(".version-toggle"));
+  const toggleVersion = () => {
+    if (phase !== "idle") return;
+    uuidVersion = uuidVersion === "v4" ? "v7" : "v4";
+    for (const el of versionToggleEls) {
+      el.textContent = uuidVersion;
+      el.classList.remove("switching");
+    }
+    void versionToggleEls[0].offsetWidth; // restart the animation on repeat clicks
+    for (const el of versionToggleEls) el.classList.add("switching");
+  };
+  for (const el of versionToggleEls) el.addEventListener("click", toggleVersion);
 
   canvas = document.getElementById("particles") as HTMLCanvasElement;
   ctx = canvas.getContext("2d")!;

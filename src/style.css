@@ -122,6 +122,7 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
   z-index: 10;
   gap: 16px;
   padding: 0 24px;
@@ -146,6 +147,74 @@ body {
   height: 28px;
   stroke: rgba(255, 255, 255, 0.25);
   flex-shrink: 0;
+}
+
+/* Absolutely positioned so it never shifts the centered divider icon.
+   Kept understated, in the same register as .divider-icon, rather than
+   competing with it for attention. One sits on each side of the icon,
+   the left one rotated 180deg (--toggle-rotate), so the pair is point-
+   symmetric like the halves: each player has one readable from their seat. */
+.version-toggle {
+  position: absolute;
+  top: 50%;
+  padding: 8px 18px;
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    background 0.2s;
+  transform: translateY(-50%) rotate(var(--toggle-rotate, 0deg));
+}
+
+.version-toggle-right {
+  right: 20px;
+}
+
+.version-toggle-left {
+  left: 20px;
+  --toggle-rotate: 180deg;
+}
+
+.version-toggle:active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.version-toggle.switching {
+  animation: version-toggle-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Gold flash matches .call-four — the same color used for the version
+   digit in the countdown call, so the accent reads as "that's the version". */
+@keyframes version-toggle-pop {
+  0% {
+    transform: translateY(-50%) rotate(var(--toggle-rotate, 0deg)) scale(0.7);
+  }
+  40% {
+    transform: translateY(-50%) rotate(var(--toggle-rotate, 0deg)) scale(1.35);
+    border-color: #ffdd00;
+    color: #ffdd00;
+    text-shadow:
+      0 0 16px rgba(255, 220, 0, 0.9),
+      0 0 32px rgba(255, 220, 0, 0.5);
+  }
+  70% {
+    transform: translateY(-50%) rotate(var(--toggle-rotate, 0deg)) scale(0.95);
+  }
+  100% {
+    transform: translateY(-50%) rotate(var(--toggle-rotate, 0deg)) scale(1);
+  }
 }
 
 /* ===== Player label ===== */
