@@ -1,17 +1,24 @@
-// Decides which player's UUID v7 wins by actually racing two Worker threads
-// (see race-worker.ts), instead of a coin-flip RNG bit. This makes the
-// outcome depend on real OS thread scheduling, which was measured (in a
-// throwaway node:worker_threads prototype, not part of this test suite) to
-// be only approximately fair — occasionally biased well outside sampling
-// noise. That tradeoff (genuine race over guaranteed fairness) was a
-// deliberate, user-confirmed choice.
+import { v7 as uuidV7 } from "uuid";
+
+// Decides which player's UUID v7 "wins" (sorts higher) by actually racing two
+// Worker threads (see race-worker.ts), instead of a coin-flip RNG bit. Both
+// workers are released from a shared barrier at the same instant and race to
+// post a result message back; the main thread issues an argument-less v7()
+// the moment each message arrives, so the issuing order itself is the race
+// outcome. The uuid package's internal state (updateV7State) makes those
+// calls strictly monotonic — within one millisecond it increments seq, across
+// milliseconds the timestamp grows — so the earlier arrival always gets the
+// lower-sorting UUID. This makes the outcome depend on real OS thread
+// scheduling, which was measured (in a throwaway node:worker_threads
+// prototype, not part of this test suite) to be only approximately fair —
+// occasionally biased well outside sampling noise. That tradeoff (genuine
+// race over guaranteed fairness) was a deliberate, user-confirmed choice.
 export const RACE_SUPPORTED =
   typeof SharedArrayBuffer !== "undefined" &&
   typeof crossOriginIsolated !== "undefined" &&
   crossOriginIsolated;
 
 const GO = 0;
-const COUNTER = 1;
 
 // Real rounds settle in a handful of milliseconds; this only guards against a
 // worker that never responds (blocked load, crash, etc.), so it can be short
@@ -25,7 +32,7 @@ let view: Int32Array | null = null;
 function ensureWorkers(): void {
   if (workerA && workerB && view) return;
 
-  const sab = new SharedArrayBuffer(8);
+  const sab = new SharedArrayBuffer(4);
   view = new Int32Array(sab);
   workerA = new Worker(new URL("./race-worker.ts", import.meta.url), { type: "module" });
   workerB = new Worker(new URL("./race-worker.ts", import.meta.url), { type: "module" });
@@ -45,18 +52,22 @@ function discardWorkers(): void {
 }
 
 // Resolves null (instead of throwing) on error or timeout, so callers can fall
-// back to a coin flip rather than hang forever.
-function runRound(): Promise<{ aWon: boolean } | null> {
+// back to a coin flip rather than hang forever. Each worker's UUID is issued
+// right when its result message arrives — the arrival order is the race, and
+// the earlier arrival holds the earlier-generated (lower-sorting) UUID. If
+// the round times out after only one result, the already-issued UUID is
+// discarded along with the round.
+function runRound(): Promise<{ uuidA: string; uuidB: string } | null> {
   const a = workerA!;
   const b = workerB!;
   const v = view!;
 
   return new Promise((resolve) => {
     Atomics.store(v, GO, 0);
-    Atomics.store(v, COUNTER, 0);
 
     let readyCount = 0;
-    let seqA = -1;
+    let uuidA = "";
+    let uuidB = "";
     let doneCount = 0;
     let settled = false;
 
@@ -89,12 +100,13 @@ function runRound(): Promise<{ aWon: boolean } | null> {
         readyCount++;
         if (readyCount === 2) Atomics.store(v, GO, 1);
       } else if (msg.type === "result") {
-        if (who === "a") seqA = msg.seq;
+        if (who === "a") uuidA = uuidV7();
+        else uuidB = uuidV7();
         doneCount++;
         if (doneCount === 2) {
           settled = true;
           cleanup();
-          resolve({ aWon: seqA === 0 });
+          resolve({ uuidA, uuidB });
         }
       }
     };
@@ -109,23 +121,34 @@ function runRound(): Promise<{ aWon: boolean } | null> {
   });
 }
 
-// Returns whether "player 0" wins the race. Falls back to a fair coin flip
-// when SharedArrayBuffer/cross-origin isolation isn't available, or when the
-// worker race itself fails to resolve, so v7 play never hangs.
-export async function racePlayer0Wins(): Promise<boolean> {
+// Builds a UUID v7 pair without racing workers, for use when
+// SharedArrayBuffer/cross-origin isolation isn't available or the worker race
+// itself fails to resolve. Two back-to-back argument-less v7() calls: the
+// package's internal monotonic state guarantees the second UUID always sorts
+// higher, and a coin flip decides which player gets it, so the fallback stays
+// as fair as the real race.
+function fallbackUuidV7Pair(): [string, string] {
+  const lower = uuidV7();
+  const higher = uuidV7();
+  const player0Wins = Math.random() < 0.5;
+  return player0Wins ? [higher, lower] : [lower, higher];
+}
+
+// Returns a pair of UUID v7 strings, one per player, decided by racing two
+// Worker threads. Falls back to a fair coin flip when SharedArrayBuffer/
+// cross-origin isolation isn't available, or when the worker race itself
+// fails to resolve, so v7 play never hangs.
+export async function raceUuidV7Pair(): Promise<[string, string]> {
   if (!RACE_SUPPORTED) {
-    return Math.random() < 0.5;
+    return fallbackUuidV7Pair();
   }
 
   ensureWorkers();
   const result = await runRound();
   if (!result) {
     discardWorkers();
-    return Math.random() < 0.5;
+    return fallbackUuidV7Pair();
   }
-  // Randomize which physical worker stands in for which player each round —
-  // the prototype showed hardware scheduling bias can be consistent, so a
-  // fixed worker-to-player mapping would let it consistently favor one seat.
-  const aIsPlayer0 = Math.random() < 0.5;
-  return aIsPlayer0 ? result.aWon : !result.aWon;
+
+  return [result.uuidA, result.uuidB];
 }

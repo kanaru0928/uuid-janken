@@ -1,14 +1,8 @@
+import { v7 as uuidV7 } from "uuid";
 import { describe, expect, it } from "vite-plus/test";
-import {
-  buildRacedUuidV7,
-  compareUuids,
-  generateRaceUuids,
-  generateUuidV4,
-  generateUuidV7,
-} from "./uuid";
+import { compareUuids, generateRaceUuids, generateUuidV4 } from "./uuid";
 
 const HEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const timestampHex = (uuid: string) => uuid.replace(/-/g, "").slice(0, 12);
 
 describe("UUID生成", () => {
   it("v4はバージョン4・バリアント10のUUIDを生成する", () => {
@@ -17,46 +11,19 @@ describe("UUID生成", () => {
     expect(uuid[14]).toBe("4");
     expect(["8", "9", "a", "b"]).toContain(uuid[19]);
   });
-
-  it("v7はバージョン7・バリアント10のUUIDを生成する", () => {
-    const uuid = generateUuidV7();
-    expect(uuid).toMatch(HEX);
-    expect(uuid[14]).toBe("7");
-    expect(["8", "9", "a", "b"]).toContain(uuid[19]);
-  });
-
-  it("v7は指定したタイムスタンプを先頭48ビットに埋め込む", () => {
-    const ts = 1_700_000_000_000;
-    const uuid = generateUuidV7(ts);
-    expect(timestampHex(uuid)).toBe(ts.toString(16).padStart(12, "0"));
-  });
 });
 
-describe("レース結果を埋め込んだv7 UUID（buildRacedUuidV7）", () => {
-  it("バージョン7・バリアント10のUUIDを生成する", () => {
-    const uuid = buildRacedUuidV7(Date.now(), true);
-    expect(uuid).toMatch(HEX);
-    expect(uuid[14]).toBe("7");
-    expect(["8", "9", "a", "b"]).toContain(uuid[19]);
-  });
-
-  it("指定したタイムスタンプを先頭48ビットに埋め込む", () => {
-    const ts = 1_700_000_000_000;
-    const uuid = buildRacedUuidV7(ts, true);
-    expect(timestampHex(uuid)).toBe(ts.toString(16).padStart(12, "0"));
-  });
-
-  // ここが核心の不変条件: タイムスタンプが同じ2つのUUIDを作るとき、
-  // isWinner=trueを渡した側は、rand_aの残りビットやrand_bがどんな乱数値で
-  // あっても必ずcompareUuids上で勝つ（＝大きい方になる）。乱数を使う性質上
-  // ワーカーによる統計的な検証はVitest上では困難/フレーキーになるため、代わりに
-  // 「勝者ビットが確実に順序を支配する」という決定的な性質を数百回の乱数バリエー
-  // ションで確認する。
-  it("isWinner=trueの側は、乱数ビットの値によらず必ずcompareUuidsで勝つ", () => {
-    const ts = Date.now();
+describe("連続して生成したv7 UUIDの決定的な大小関係", () => {
+  // ここが核心の不変条件: 同一モジュールインスタンスで連続して呼んだ
+  // v7()は、uuidパッケージの内部状態（updateV7State）が単調増加を保証する
+  // （同一ミリ秒内はseqをインクリメントし、ミリ秒が進めばタイムスタンプで
+  // 大きくなる）ため、後に呼ばれた方が必ずcompareUuids上で勝つ（＝大きい方
+  // になる）。レース勝敗の割り当て（race.ts）はこの性質に順序性を委ねている
+  // ので、数百回の反復で決定的に成立することを確認する。
+  it("後に生成した側が、乱数ビットの値によらず必ずcompareUuidsで勝つ", () => {
     for (let i = 0; i < 500; i++) {
-      const winner = buildRacedUuidV7(ts, true);
-      const loser = buildRacedUuidV7(ts, false);
+      const loser = uuidV7();
+      const winner = uuidV7();
       expect(compareUuids(winner, loser)).toBe("a");
       expect(compareUuids(loser, winner)).toBe("b");
     }
@@ -64,9 +31,13 @@ describe("レース結果を埋め込んだv7 UUID（buildRacedUuidV7）", () =>
 });
 
 describe("対戦UUIDの生成", () => {
-  it("v7では両者のタイムスタンプ部が完全に一致する", async () => {
+  it("v7では両者ともバージョン7・バリアント10のUUIDになる", async () => {
     const [a, b] = await generateRaceUuids("v7");
-    expect(timestampHex(a)).toBe(timestampHex(b));
+    for (const uuid of [a, b]) {
+      expect(uuid).toMatch(HEX);
+      expect(uuid[14]).toBe("7");
+      expect(["8", "9", "a", "b"]).toContain(uuid[19]);
+    }
   });
 
   it("v7では勝敗が必ずどちらかに決まり、引き分けにならない", async () => {
